@@ -1,0 +1,168 @@
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id            String         @id @default(cuid())
+  name          String
+  email         String         @unique
+  passwordHash  String
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  sessions      Session[]
+  repositories  Repository[]
+  analyses      Analysis[]
+  grillSessions GrillSession[]
+  answers       Answer[]
+  reports       Report[]
+
+  @@index([email])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  createdAt    DateTime @default(now())
+
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  email     String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([email])
+}
+
+model Repository {
+  id              String     @id @default(cuid())
+  userId          String
+  githubUrl       String
+  repoName        String
+  ownerName       String
+  defaultBranch   String     @default("main")
+  latestCommitSha String
+  primaryLanguage String?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  analyses        Analysis[]
+
+  @@unique([userId, ownerName, repoName])
+  @@index([userId])
+}
+
+model Analysis {
+  id                   String         @id @default(cuid())
+  userId               String
+  repositoryId         String
+  repositorySnapshot   Json
+  technologyStack      Json
+  architectureFindings Json
+  readmeClaims         Json
+  evidenceReferences   Json?
+  analysisStatus       String         @default("COMPLETED")
+  createdAt            DateTime       @default(now())
+
+  user                 User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  repository           Repository     @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  grillSessions        GrillSession[]
+  reports              Report[]
+
+  @@index([userId])
+  @@index([repositoryId])
+}
+
+model GrillSession {
+  id              String     @id @default(cuid())
+  userId          String
+  analysisId      String
+  sessionStatus   String     @default("ACTIVE")
+  currentProgress Int        @default(0)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  analysis        Analysis   @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+  questions       Question[]
+  reports         Report[]
+
+  @@index([userId])
+  @@index([analysisId])
+}
+
+model Question {
+  id               String       @id @default(cuid())
+  grillSessionId   String
+  order            Int
+  questionContent  String       @db.Text
+  difficulty       String
+  category         String
+  sourceEvidence   Json
+  expectedConcepts Json
+  followUpContext  String?      @db.Text
+
+  grillSession     GrillSession @relation(fields: [grillSessionId], references: [id], onDelete: Cascade)
+  answers          Answer[]
+
+  @@unique([grillSessionId, order])
+  @@index([grillSessionId])
+}
+
+model Answer {
+  id                 String   @id @default(cuid())
+  questionId         String
+  userId             String
+  submittedAnswer    String   @db.Text
+  rubricScore        Int?
+  evaluationScore    Int
+  evaluationFeedback String   @db.Text
+  correctness        Int
+  codeUnderstanding  Int
+  clarity            Int
+  reasoning          Int
+  evaluationDetails  Json?
+  createdAt          DateTime @default(now())
+
+  question           Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([questionId])
+  @@index([userId])
+}
+
+model Report {
+  id              String       @id @default(cuid())
+  userId          String
+  analysisId      String
+  grillSessionId  String       @unique
+  finalScore      Int
+  rubricBreakdown Json
+  strengths       Json
+  weaknesses      Json
+  recommendations Json
+  questionResults Json
+  createdAt       DateTime     @default(now())
+
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  analysis        Analysis     @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+  grillSession    GrillSession @relation(fields: [grillSessionId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([analysisId])
+}
